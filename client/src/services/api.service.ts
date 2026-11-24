@@ -90,5 +90,29 @@ export const apiService = {
     });
     if (!res.ok) throw new Error('Błąd eksportu dokumentacji.');
     return await res.blob();
+  },
+
+  async getPrompts(): Promise<string[]> {
+    const res = await fetch('/api/prompts');
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Błąd pobierania listy promptów.');
+    return data.prompts;
+  },
+
+  async getPromptContent(filename: string): Promise<string> {
+    const res = await fetch(`/api/prompts/${encodeURIComponent(filename)}`);
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Błąd pobierania treści promptu.');
+    return data.content;
+  },
+
+  async savePromptContent(filename: string, content: string): Promise<void> {
+    const res = await fetch(`/api/prompts/${encodeURIComponent(filename)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content })
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Błąd zapisu promptu.');
   }
 };

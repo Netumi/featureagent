@@ -2,10 +2,47 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { upload } from '../middleware/upload.middleware';
 import { documentationService } from '../ai/services/documentation.service';
 import { mockupService } from '../ai/services/mockup.service';
+import { promptLoader } from '../ai/services/prompt-loader.service';
 import { generateDocSchema, editDocSchema, regenerateSectionSchema, editMockupSchema } from '../schemas/feature.schema';
 import { ExportUtil } from '../utils/export.util';
 
 const router = Router();
+
+// Get list of prompts
+router.get('/prompts', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const prompts = promptLoader.listPrompts();
+    res.json({ success: true, prompts });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get prompt content
+router.get('/prompts/:filename', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const filename = req.params.filename;
+    const content = promptLoader.getPromptContent(filename);
+    res.json({ success: true, filename, content });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Save prompt content
+router.put('/prompts/:filename', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const filename = req.params.filename;
+    const { content } = req.body;
+    if (typeof content !== 'string') {
+      return res.status(400).json({ success: false, error: 'Content string is required.' });
+    }
+    promptLoader.savePromptContent(filename, content);
+    res.json({ success: true, filename });
+  } catch (error) {
+    next(error);
+  }
+});
 
 // Generate Documentation & Optional Mockup
 router.post('/generate-documentation', upload.array('screenshots', 5), async (req: Request, res: Response, next: NextFunction) => {

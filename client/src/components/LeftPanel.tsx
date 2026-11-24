@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, Sparkles, X, MessageSquare } from 'lucide-react';
+import { Upload, Sparkles, X, MessageSquare, Settings } from 'lucide-react';
 
 interface LeftPanelProps {
   onGenerate: (featureIdea: string, additionalContext: string, generateMockup: boolean, screenshots: File[]) => void;
   onAiEditDoc: (instruction: string) => void;
   onAiEditMockup: (instruction: string) => void;
+  onOpenSettings: () => void;
   isLoading: boolean;
   hasDocumentation: boolean;
   hasMockup: boolean;
@@ -14,6 +15,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
   onGenerate,
   onAiEditDoc,
   onAiEditMockup,
+  onOpenSettings,
   isLoading,
   hasDocumentation,
   hasMockup
@@ -229,6 +231,18 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
           )}
         </div>
       )}
+
+      {/* Settings Button in Bottom Left Corner */}
+      <div className="pt-2 mt-auto border-t border-gray-200">
+        <button
+          type="button"
+          onClick={onOpenSettings}
+          className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-2.5 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 text-xs cursor-pointer shadow-xs border border-gray-200"
+        >
+          <Settings className="w-4 h-4 text-gray-600" />
+          <span>Ustawienia</span>
+        </button>
+      </div>
     </div>
   );
 };

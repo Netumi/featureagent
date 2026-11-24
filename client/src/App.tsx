@@ -3,6 +3,7 @@ import { Header } from './components/Header';
 import { LeftPanel } from './components/LeftPanel';
 import { DocumentationPanel } from './components/DocumentationPanel';
 import { MockupPanel } from './components/MockupPanel';
+import { SettingsModal } from './components/SettingsModal';
 import { DocumentationData, MockupData } from './types';
 import { apiService } from './services/api.service';
 import { AlertCircle, Sparkles } from 'lucide-react';
@@ -12,6 +13,7 @@ export function App() {
   const [mockup, setMockup] = useState<MockupData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const handleGenerate = async (
     featureIdea: string,
@@ -138,6 +140,7 @@ export function App() {
           onGenerate={handleGenerate}
           onAiEditDoc={handleAiEditDoc}
           onAiEditMockup={handleAiEditMockup}
+          onOpenSettings={() => setIsSettingsOpen(true)}
           isLoading={isLoading}
           hasDocumentation={!!documentation}
           hasMockup={!!mockup}
@@ -159,6 +162,12 @@ export function App() {
           />
         )}
       </div>
+
+      {/* Settings Modal */}
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+      />
 
       {/* Floating Global AI Loading Indicator */}
       {isLoading && <LoadingIndicator />}
