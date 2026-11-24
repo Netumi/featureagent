@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { MockupData } from '../types';
 import { Code, Eye, RefreshCw, Download, Copy, Check, ShieldAlert, Maximize2, Minimize2 } from 'lucide-react';
 
@@ -6,6 +6,27 @@ interface MockupPanelProps {
   mockup: MockupData | null;
   onRegenerateMockup: () => void;
   isLoading: boolean;
+}
+
+// Compile TSX code using Babel Standalone loaded in main app context
+// Returns { code: string } on success or { error: string } on failure
+function compileTsx(source: string): { code: string } | { error: string } {
+  try {
+    // @ts-ignore - Babel is loaded globally via script tag in index.html
+    const Babel = (window as any).Babel;
+    if (!Babel) return { error: 'Babel nie jest dostępny. Sprawdź czy index.html ładuje Babel Standalone.' };
+    const result = Babel.transform(source, {
+      presets: [
+        ['env', { modules: 'commonjs' }],
+        'react',
+        'typescript',
+      ],
+      filename: 'App.tsx',
+    });
+    return { code: result.code as string };
+  } catch (e: any) {
+    return { error: e.message || String(e) };
+  }
 }
 
 export const MockupPanel: React.FC<MockupPanelProps> = ({
@@ -16,129 +37,101 @@ export const MockupPanel: React.FC<MockupPanelProps> = ({
   const [activeTab, setActiveTab] = useState<'preview' | 'code'>('preview');
   const [copied, setCopied] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [compiledHtml, setCompiledHtml] = useState<string>('');
+  const prevCodeRef = useRef<string>('');
 
-  if (!mockup) return null;
+  // Compile TSX whenever mockup changes
+  useEffect(() => {
+    if (!mockup) return;
 
-  // Normalize code: remove markdown code fences if LLM produced them
-  let rawCode = (mockup.tsxCode || '').trim();
-  rawCode = rawCode.replace(/^```(?:tsx|jsx|typescript|javascript)?\s*/i, '');
-  rawCode = rawCode.replace(/\s*```$/i, '').trim();
+    // Normalize: strip markdown fences
+    let rawCode = (mockup.tsxCode || '').trim();
+    rawCode = rawCode.replace(/^```(?:tsx|jsx|typescript|javascript)?\s*/i, '');
+    rawCode = rawCode.replace(/\s*```$/i, '').trim();
 
-  const htmlContent = `<!DOCTYPE html>
+    // Avoid recompiling the same code (e.g. tab switch)
+    if (rawCode === prevCodeRef.current) return;
+    prevCodeRef.current = rawCode;
+
+    const compiled = compileTsx(rawCode);
+
+    const errorHtml = (title: string, msg: string) => `<!DOCTYPE html><html><body style="margin:0;padding:20px;font-family:ui-sans-serif,system-ui,sans-serif;background:#fff"><div style="color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:20px"><div style="font-weight:700;margin-bottom:8px">${title}</div><pre style="background:#fee2e2;padding:12px;border-radius:8px;font-size:12px;overflow:auto;white-space:pre-wrap;font-family:monospace">${msg.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</pre></div></body></html>`;
+
+    if ('error' in compiled) {
+      setCompiledHtml(errorHtml('Błąd kompilacji TSX (Babel)', compiled.error));
+      return;
+    }
+
+    // Build self-contained iframe HTML using ONLY the already-compiled vanilla JS
+    // React and ReactDOM are inlined as UMD (CDN), no Babel needed inside iframe
+    const jsCode = compiled.code;
+    const cssCode = mockup.cssCode || '';
+
+    const html = `<!DOCTYPE html>
 <html lang="pl">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
-  <script>
-    window.react = window.React;
-  </script>
-  <script src="https://cdn.jsdelivr.net/npm/lucide-react@0.460.0/dist/umd/lucide-react.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.6/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"><\/script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"><\/script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"><\/script>
+  <script src="https://cdn.jsdelivr.net/npm/lucide-react@0.460.0/dist/umd/lucide-react.min.js"><\/script>
   <style>
-    html, body, #root {
-      width: 100%;
-      min-height: 100vh;
-      margin: 0;
-      padding: 0;
-      background-color: #f8fafc;
-      font-family: ui-sans-serif, system-ui, sans-serif;
-    }
-    ${mockup.cssCode || ''}
+    html, body, #root { width:100%; min-height:100vh; margin:0; padding:0; background:#f8fafc; font-family:ui-sans-serif,system-ui,sans-serif; }
+    ${cssCode}
   </style>
 </head>
 <body>
   <div id="root"></div>
-
   <script>
-    (function render() {
-      const rootEl = document.getElementById('root');
-      const sourceCode = ${JSON.stringify(rawCode)};
-
-      function showError(title, msg) {
-        rootEl.innerHTML = '<div style="padding: 20px; color: #b91c1c; background: #fef2f2; border: 1px solid #fecaca; border-radius: 12px; margin: 16px; font-family: ui-sans-serif, system-ui, sans-serif;">' +
-          '<div style="font-weight: 700; margin-bottom: 8px;">' + title + '</div>' +
-          '<pre style="background: #fee2e2; padding: 12px; border-radius: 8px; font-size: 12px; overflow: auto; white-space: pre-wrap; font-family: monospace;">' + (msg || '') + '</pre>' +
-          '</div>';
-      }
-
-      if (!sourceCode) {
-        showError('Brak kodu', 'Nie przekazano kodu makiety.');
-        return;
-      }
-
-      try {
-        if (typeof Babel === 'undefined') {
-          showError('Błąd środowiska', 'Biblioteka Babel nie załadowała się poprawnie z CDN.');
-          return;
-        }
-
-        // Transform TSX/JSX to CommonJS - this properly transpiles 'import' and 'export' statements
-        const transformed = Babel.transform(sourceCode, {
-          presets: [
-            ['env', { modules: 'commonjs' }],
-            'react',
-            'typescript'
-          ],
-          filename: 'App.tsx'
-        }).code;
-
-        // Proxy for Lucide icons so ANY icon rendered never throws ReferenceError or crash
-        const lucideLib = window.LucideReact || {};
-        const safeIcons = new Proxy(lucideLib, {
-          get(target, prop) {
-            if (typeof prop === 'string' && prop in target) {
-              return target[prop];
-            }
-            return function DummyFallbackIcon(props) {
-              return React.createElement('span', {
-                className: ((props && props.className) || 'w-4 h-4') + ' inline-flex items-center justify-center opacity-40',
-                title: String(prop)
-              }, '•');
+  window.onerror = function(msg, src, line, col, err) {
+    document.getElementById('root').innerHTML =
+      '<div style="padding:20px;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:12px;margin:16px;font-family:ui-sans-serif,system-ui,sans-serif">' +
+      '<div style="font-weight:700;margin-bottom:8px">Błąd wykonania (Runtime)</div>' +
+      '<pre style="background:#fee2e2;padding:12px;border-radius:8px;font-size:12px;overflow:auto;white-space:pre-wrap;font-family:monospace">' + msg + (line ? ' (linia ' + line + ')' : '') + '</pre></div>';
+    return true;
+  };
+  (function() {
+    var exports = {};
+    var module = { exports: exports };
+    function require(name) {
+      if (name === 'react') return Object.assign({}, React, { default: React });
+      if (name === 'react-dom' || name === 'react-dom/client') return Object.assign({}, ReactDOM, { default: ReactDOM });
+      if (name === 'lucide-react') {
+        var lib = window.LucideReact || {};
+        return new Proxy(lib, {
+          get: function(t, p) {
+            if (typeof p === 'string' && p in t) return t[p];
+            return function DummyIcon(props) {
+              return React.createElement('span', { title: String(p), style: { display:'inline-flex', opacity:0.4 } }, '□');
             };
           }
         });
-
-        // Provide require function for CommonJS execution
-        const customRequire = function(moduleName) {
-          if (moduleName === 'react') {
-            return Object.assign({}, React, { default: React });
-          }
-          if (moduleName === 'react-dom' || moduleName === 'react-dom/client') {
-            return Object.assign({}, ReactDOM, { default: ReactDOM });
-          }
-          if (moduleName === 'lucide-react') {
-            return Object.assign({}, safeIcons, { default: safeIcons });
-          }
-          return {};
-        };
-
-        const moduleExports = {};
-        const evalFn = new Function('exports', 'require', 'React', 'ReactDOM', transformed);
-        evalFn(moduleExports, customRequire, React, ReactDOM);
-
-        const Component = moduleExports.default ||
-          moduleExports.App ||
-          moduleExports.FeatureMockup ||
-          Object.values(moduleExports).find(v => typeof v === 'function');
-
-        if (!Component) {
-          showError('Nie znaleziono komponentu', 'Wygenerowany kod musi eksportować komponent (np. export default function App).');
-          return;
-        }
-
-        const root = ReactDOM.createRoot(rootEl);
-        root.render(React.createElement(Component));
-      } catch (err) {
-        console.error('Błąd renderowania makiety:', err);
-        showError('Błąd renderowania makiety', err.message || String(err));
       }
-    })();
-  </script>
+      return {};
+    }
+    try {
+      ${jsCode}
+      var mod = module.exports && Object.keys(module.exports).length ? module.exports : exports;
+      var Component = mod.default || mod.App || mod.FeatureMockup ||
+        Object.values(mod).find(function(v){ return typeof v === 'function'; });
+      if (!Component) throw new Error('Nie znaleziono eksportowanego komponentu React (np. export default function App).');
+      var root = ReactDOM.createRoot(document.getElementById('root'));
+      root.render(React.createElement(Component));
+    } catch(e) {
+      document.getElementById('root').innerHTML =
+        '<div style="padding:20px;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:12px;margin:16px;font-family:ui-sans-serif,system-ui,sans-serif">' +
+        '<div style="font-weight:700;margin-bottom:8px">Błąd renderowania makiety</div>' +
+        '<pre style="background:#fee2e2;padding:12px;border-radius:8px;font-size:12px;overflow:auto;white-space:pre-wrap;font-family:monospace">' + (e.message || String(e)) + '</pre></div>';
+    }
+  })();
+  <\/script>
 </body>
 </html>`;
+    setCompiledHtml(html);
+  }, [mockup]);
+
+  if (!mockup) return null;
 
   const copyCode = () => {
     navigator.clipboard.writeText(mockup.tsxCode);
@@ -158,8 +151,8 @@ export const MockupPanel: React.FC<MockupPanelProps> = ({
 
   const panelContent = (
     <div className={`bg-white border-t lg:border-t-0 lg:border-l border-gray-200 flex flex-col overflow-hidden shadow-lg ${isFullscreen
-        ? 'w-full h-[96vh] max-w-7xl rounded-2xl shadow-2xl border border-gray-300'
-        : 'w-full flex-1 min-w-0 min-h-[650px] lg:min-h-0 lg:h-full'
+      ? 'w-full h-[96vh] max-w-7xl rounded-2xl shadow-2xl border border-gray-300'
+      : 'w-full flex-1 min-w-0 min-h-[650px] lg:min-h-0 lg:h-full'
       }`}>
       {/* Top Bar */}
       <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between shrink-0">
@@ -206,7 +199,7 @@ export const MockupPanel: React.FC<MockupPanelProps> = ({
             <div className="flex-1 relative min-h-0 w-full">
               <iframe
                 title="Podgląd makiety"
-                srcDoc={htmlContent}
+                srcDoc={compiledHtml}
                 sandbox="allow-scripts"
                 className="absolute inset-0 w-full h-full border-0 bg-transparent block"
               />
