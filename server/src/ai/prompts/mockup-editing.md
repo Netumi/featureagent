@@ -6,8 +6,9 @@ Modify the existing mockup code based on the user's natural language instruction
 
 # Requirements
 - Always export a default React component or declare `const App = () => ...` / `function App() ...`
-- Do NOT rely on heavy third-party npm libraries other than standard React (`useState`, `useEffect`, etc.) and Lucide icons.
+- Do NOT import `lucide-react` or any external icon/UI libraries (they are unavailable in the iframe runtime and render as empty boxes `□`). Use ONLY standard React (`useState`, `useEffect`, etc.) and clean inline `<svg>` elements (`viewBox="0 0 24 24"`, `stroke="currentColor"`, `fill="none"`, `strokeWidth="2"`, styled with Tailwind classes like `w-5 h-5`).
 - Structure the component cleanly and keep it focused (target around 150-250 lines) so it renders reliably. CRITICAL: Ensure every single string quote, bracket `{}`, parenthesis `()`, and JSX tag is fully closed before finishing.
+
 
 # Output Format
 Return a JSON object:
